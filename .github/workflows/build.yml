@@ -1,0 +1,48 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install MinGW
+        run: sudo apt-get update && sudo apt-get install -y gcc-mingw-w64-x86-64
+
+      - name: Unit tests
+        run: make test
+
+      - name: Linux x86_64 plugin
+        run: make linux
+
+      - name: Windows x64 plugin
+        run: make windows
+
+      - name: Integration test with Manticore
+        run: sh tests/integration.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stem_lv
+          path: |
+            build/stem_lv.so
+            build/stem_lv.dll
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp build/stem_lv.so build/stem_lv-linux-x86_64.so
+          cp build/stem_lv.dll build/stem_lv-windows-x64.dll
+          gh release create "$GITHUB_REF_NAME" --generate-notes \
+            build/stem_lv-linux-x86_64.so build/stem_lv-windows-x64.dll

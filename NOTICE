@@ -1,0 +1,10 @@
+manticore-stem-lv
+Copyright 2026 Ilja Kozirevs
+
+This product includes software developed at
+The Apache Software Foundation (http://www.apache.org/).
+
+src/latvian_stemmer.c is a C port of
+org.apache.lucene.analysis.lv.LatvianStemmer from Apache Lucene,
+and tests/test_stemmer.c reuses the cases of Lucene's TestLatvianStemmer.
+Both are licensed under the Apache License, Version 2.0.
