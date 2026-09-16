@@ -26,9 +26,11 @@ until sql "SHOW STATUS" >/dev/null 2>&1; do
   sleep 1
 done
 
-PLUGIN_DIR="$(sql "SHOW SETTINGS" | awk -F'\t' '$1 == "common.plugin_dir" { print $2 }')"
+sql "SHOW SETTINGS" | grep -i plugin || true
+PLUGIN_DIR="$(sql "SHOW SETTINGS" | awk -F'\t' '$1 ~ /plugin_dir/ { print $2 }')"
+PLUGIN_DIR="${PLUGIN_DIR:-/usr/local/lib/manticore}"
 if [ "$PLUGIN_DIR" != "/usr/share/manticore/modules" ]; then
-  docker exec "$NAME" sh -c "mkdir -p '$PLUGIN_DIR' && cp /usr/share/manticore/modules/stem_lv.so '$PLUGIN_DIR/'"
+  docker exec -u root "$NAME" sh -c "mkdir -p '$PLUGIN_DIR' && cp /usr/share/manticore/modules/stem_lv.so '$PLUGIN_DIR/'"
 fi
 echo "searchd $(sql "SHOW STATUS LIKE 'version'" | cut -f2), plugin_dir=$PLUGIN_DIR"
 
