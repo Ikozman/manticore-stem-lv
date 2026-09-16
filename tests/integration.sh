@@ -14,10 +14,13 @@ cleanup() { docker rm -f "$NAME" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 
 docker run -d --name "$NAME" \
-  -v "$ROOT/build/stem_lv.so:/usr/share/manticore/modules/stem_lv.so:ro" \
+  -v "$ROOT/build/stem_lv.so:/tmp/stem_lv.so:ro" \
   "manticoresearch/manticore:$TAG" >/dev/null
 
 sql() { docker exec "$NAME" mysql -h0 -P9306 -N -B -e "$1"; }
+
+# ids of a SELECT, space separated (the client may draw a table around them)
+ids() { sql "$1" | grep -oE '[0-9]+' | tr '\n' ' ' | sed 's/ $//'; }
 
 i=0
 until sql "SHOW STATUS" >/dev/null 2>&1; do
@@ -26,13 +29,11 @@ until sql "SHOW STATUS" >/dev/null 2>&1; do
   sleep 1
 done
 
-sql "SHOW SETTINGS" | grep -i plugin || true
-PLUGIN_DIR="$(sql "SHOW SETTINGS" | awk -F'\t' '$1 ~ /plugin_dir/ { print $2 }')"
+PLUGIN_DIR="$(sql "SHOW SETTINGS" | grep plugin_dir | grep -oE '/[^ |	]+' | head -n 1)"
 PLUGIN_DIR="${PLUGIN_DIR:-/usr/local/lib/manticore}"
-if [ "$PLUGIN_DIR" != "/usr/share/manticore/modules" ]; then
-  docker exec -u root "$NAME" sh -c "mkdir -p '$PLUGIN_DIR' && cp /usr/share/manticore/modules/stem_lv.so '$PLUGIN_DIR/'"
-fi
-echo "searchd $(sql "SHOW STATUS LIKE 'version'" | cut -f2), plugin_dir=$PLUGIN_DIR"
+docker exec -u root "$NAME" sh -c "mkdir -p '$PLUGIN_DIR' && cp /tmp/stem_lv.so '$PLUGIN_DIR/'"
+echo "plugin_dir: $PLUGIN_DIR"
+sql "SHOW STATUS LIKE 'version'"
 
 sql "CREATE TABLE products (name text) charset_table='non_cjk' min_prefix_len='3' index_token_filter='stem_lv.so:stem_lv:mode=both'"
 sql "INSERT INTO products (id, name) VALUES
@@ -43,30 +44,35 @@ sql "INSERT INTO products (id, name) VALUES
 
 FAILED=0
 
-expect() {
-  query="$1"
-  expected="$2"
-  got="$(sql "SELECT id FROM products WHERE MATCH('$query') ORDER BY id ASC OPTION token_filter='stem_lv.so:stem_lv_query:'" | tr '\n' ' ' | sed 's/ $//')"
+check() {
+  label="$1"
+  got="$2"
+  expected="$3"
   if [ "$got" = "$expected" ]; then
-    echo "ok   '$query' -> [$got]"
+    echo "ok   $label -> [$got]"
   else
-    echo "FAIL '$query' -> [$got], expected [$expected]"
+    echo "FAIL $label -> [$got], expected [$expected]"
     FAILED=1
   fi
 }
 
-expect "televizoru" "1"
-expect "televizoriem" "1"
-expect "televīzors" "1"
-expect "telefoniem" "2"
-expect "zvaigzne" "3"
-expect "ledusskapji" "4"
-expect "saldētava" "4"
-expect "samsung" "1"
-expect "tele*" "1 2"
+stemmed() {
+  check "'$1'" "$(ids "SELECT id FROM products WHERE MATCH('$1') ORDER BY id ASC OPTION token_filter='stem_lv.so:stem_lv_query:'")" "$2"
+}
 
-# mode=both keeps the original words, so a query without the filter still matches them
-got="$(sql "SELECT id FROM products WHERE MATCH('televizors')" | tr '\n' ' ' | sed 's/ $//')"
-if [ "$got" = "1" ]; then echo "ok   'televizors' without query filter -> [$got]"; else echo "FAIL original word lookup -> [$got]"; FAILED=1; fi
+stemmed "televizoru" "1"
+stemmed "televizoriem" "1"
+stemmed "televīzors" "1"
+stemmed "telefoniem" "2"
+stemmed "zvaigzne" "3"
+stemmed "ledusskapji" "4"
+stemmed "saldētava" "4"
+stemmed "samsung" "1"
+stemmed "tele*" "1 2"
+
+# mode=both keeps the original words: without the query filter the exact word is found...
+check "'televizors' without query filter" "$(ids "SELECT id FROM products WHERE MATCH('televizors')")" "1"
+# ...and another form is not, so it is the stemming that matches above
+check "'televizoru' without query filter" "$(ids "SELECT id FROM products WHERE MATCH('televizoru')")" ""
 
 exit "$FAILED"
