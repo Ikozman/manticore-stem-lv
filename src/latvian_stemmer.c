@@ -31,7 +31,12 @@ typedef struct
 	int palatalizes;
 } lv_affix;
 
-/* Order matters: the first matching suffix wins, exactly as in Lucene. */
+/*
+ * Order matters: the first matching suffix wins, exactly as in Lucene.
+ * Lines marked "folded" are not in Lucene: they are the forms ajās, ajā and ēm
+ * take once a charset_table strips diacritics, which would otherwise be missed
+ * (every other Lucene suffix still has a match after folding).
+ */
 static const lv_affix AFFIXES[] = {
 	{ { 'a', 'j', 'i', 'e', 'm' }, 5, 3, 0 },
 	{ { 'a', 'j', 'a', 'i' }, 4, 3, 0 },
@@ -39,14 +44,17 @@ static const lv_affix AFFIXES[] = {
 	{ { 'a', 'j', A_MACRON, 'm' }, 4, 2, 0 },
 	{ { 'a', 'j', 'o', 's' }, 4, 2, 0 },
 	{ { 'a', 'j', A_MACRON, 's' }, 4, 2, 0 },
+	{ { 'a', 'j', 'a', 's' }, 4, 2, 0 }, /* folded ajās */
 	{ { 'i', 'e', 'm' }, 3, 2, 1 },
 	{ { 'a', 'j', A_MACRON }, 3, 2, 0 },
+	{ { 'a', 'j', 'a' }, 3, 2, 0 }, /* folded ajā */
 	{ { 'a', 'i', 's' }, 3, 2, 0 },
 	{ { 'a', 'i' }, 2, 2, 0 },
 	{ { 'e', 'i' }, 2, 2, 0 },
 	{ { A_MACRON, 'm' }, 2, 1, 0 },
 	{ { 'a', 'm' }, 2, 1, 0 },
 	{ { E_MACRON, 'm' }, 2, 1, 0 },
+	{ { 'e', 'm' }, 2, 1, 0 }, /* folded ēm */
 	{ { I_MACRON, 'm' }, 2, 1, 0 },
 	{ { 'i', 'm' }, 2, 1, 0 },
 	{ { 'u', 'm' }, 2, 1, 0 },
